@@ -1,0 +1,10 @@
+# Core ML dependencies
+torch>=2.8.0
+transformers>=4.55.4
+
+# Web API
+flask>=3.1.2
+flask-cors>=6.0.1
+
+# Utilities
+numpy>=2.3.2

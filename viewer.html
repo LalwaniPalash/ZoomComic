@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comic Explorer - Single Panel Edition</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            color: #f0f0f0;
+            background: linear-gradient(135deg, #1d2b64, #3a6085);
+        }
+
+        .container { display: flex; height: 100vh; }
+
+        .sidebar {
+            width: 320px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 25px;
+            overflow-y: auto;
+            backdrop-filter: blur(12px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 10;
+        }
+
+        .main-content {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        /* --- Panel Styling --- */
+        .panel {
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            cursor: pointer;
+            text-align: center;
+            /* ENHANCEMENT: Smooth transition for opacity and transform */
+            transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+        }
+
+        /* Animation state for when the panel is exiting */
+        .panel.is-exiting {
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none; /* Disable clicks during animation */
+        }
+        
+        .panel-text {
+            font-weight: 500;
+            color: #111;
+            /* Prevents text selection during rapid clicks */
+            user-select: none; 
+        }
+
+        /* --- UI Components --- */
+        .btn {
+            background: linear-gradient(45deg, #4e69ee, #764ba2);
+            border: none; color: white; padding: 12px 20px;
+            border-radius: 8px; cursor: pointer; font-size: 15px;
+            font-weight: 500; margin: 5px 0; width: 100%;
+            transition: all 0.2s ease-in-out; text-align: center;
+        }
+        .btn:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3); }
+        .btn:disabled { background: #555; opacity: 0.7; cursor: not-allowed; }
+        .status { padding: 15px; border-radius: 8px; margin: 15px 0; font-size: 13px; }
+        .status.generating { border-left: 4px solid #ffc107; background: rgba(255, 193, 7, 0.2); }
+        .status.success { border-left: 4px solid #28a745; background: rgba(40, 167, 69, 0.2); }
+
+        .zoom-info { position: absolute; bottom: 20px; left: 20px; background: rgba(0, 0, 0, 0.7); padding: 8px 15px; border-radius: 20px; font-size: 14px; backdrop-filter: blur(10px); }
+        .generation-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>📖 Comic Explorer</h2>
+            <div class="controls">
+                <input type="text" id="seedInput" placeholder="A story begins..." value="A detective made of moonlight solves a crime." style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #555; background: #222; color: white; margin-bottom: 10px;">
+                <button class="btn" id="startBtn">🚀 Start Story</button>
+                <button class="btn" id="resetBtn">🔄 Reset</button>
+            </div>
+            <div class="status" id="statusPanel"><strong>Ready to explore.</strong></div>
+            <div id="logContainer" style="max-height: 400px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 5px; padding: 10px; margin-top: 15px;"></div>
+        </div>
+        <div class="main-content">
+            <div class="panel" id="mainPanel" data-level="0" data-full-text="">
+                <div class="panel-text" id="panelText">
+                    Enter a prompt and click "Start Story" to begin.
+                </div>
+            </div>
+        </div>
+        <div class="zoom-info" id="zoomInfo">Level: 0</div>
+        <div class="generation-overlay" id="generationOverlay"></div>
+    </div>
+
+    <script>
+        class SinglePanelExplorer {
+            constructor() {
+                this.apiBaseUrl = 'http://localhost:5001';
+                this.currentLevel = 0;
+                this.isAnimating = false;
+                this.explorationPath = [];
+
+                this.panel = document.getElementById('mainPanel');
+                this.panelText = document.getElementById('panelText');
+                
+                this.setupEventListeners();
+                this.updateZoomInfo();
+            }
+
+            setupEventListeners() {
+                document.getElementById('startBtn').addEventListener('click', () => this.startNewExploration());
+                document.getElementById('resetBtn').addEventListener('click', () => this.startNewExploration(true)); // Pass true to reset
+                this.panel.addEventListener('click', () => this.generateNextLevel());
+            }
+
+            async startNewExploration(isReset = false) {
+                if (this.isAnimating) return;
+
+                const seed = document.getElementById('seedInput').value.trim();
+                if (!seed && !isReset) {
+                    this.updateStatus('Please enter an initial prompt.', 'error');
+                    return;
+                }
+
+                this.isAnimating = true;
+                this.currentLevel = 0;
+                this.explorationPath = [];
+                document.getElementById('logContainer').innerHTML = '';
+                
+                const initialText = isReset ? 'Enter a prompt and click "Start Story" to begin.' : `Generating story from: "${seed}"...`;
+
+                await this.transitionPanelContent(initialText, 0);
+
+                if (isReset) {
+                    this.isAnimating = false;
+                    this.updateStatus('Reset complete.', 'success');
+                    return;
+                }
+                
+                try {
+                    this.updateStatus('Generating initial text...', 'generating');
+                    const response = await fetch(`${this.apiBaseUrl}/generate-initial`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ seed })
+                    });
+                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                    
+                    const data = await response.json();
+                    await this.transitionPanelContent(data.full_text, 0);
+                    this.addToLog(data.full_text);
+                    this.updateStatus('Story started! Click the panel to continue.', 'success');
+                } catch (error) {
+                    await this.transitionPanelContent(`Error: ${error.message}. Please check the console.`, 0);
+                    this.updateStatus(`Failed to start: ${error.message}`, 'error');
+                } finally {
+                    this.isAnimating = false;
+                }
+            }
+
+            async generateNextLevel() {
+                const currentText = this.panel.getAttribute('data-full-text');
+                if (this.isAnimating || !currentText || this.currentLevel < 0) return;
+
+                this.isAnimating = true;
+                this.updateStatus(`Generating level ${this.currentLevel + 1}...`, 'generating');
+
+                try {
+                    // Use the last part of the current text as the prompt for the next level
+                    const prompt = currentText.slice(-Math.min(200, currentText.length));
+
+                    const response = await fetch(`${this.apiBaseUrl}/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ocr_text: prompt, zoom_level: this.currentLevel + 1 })
+                    });
+                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+
+                    const data = await response.json();
+                    await this.transitionPanelContent(data.full_text, this.currentLevel + 1);
+                    this.addToLog(data.full_text);
+                    this.updateStatus(`Generated level ${this.currentLevel}!`, 'success');
+                } catch(error) {
+                    this.updateStatus(`Generation failed: ${error.message}`, 'error');
+                } finally {
+                    this.isAnimating = false;
+                }
+            }
+            
+            /**
+             * Handles the core animation logic for updating the panel.
+             * @param {string} newText The new text to display.
+             * @param {number} newLevel The new level number.
+             */
+            transitionPanelContent(newText, newLevel) {
+                return new Promise(resolve => {
+                    // 1. Add 'is-exiting' to trigger the fade-out and shrink animation
+                    this.panel.classList.add('is-exiting');
+
+                    const onTransitionEnd = () => {
+                        // 2. Once animation is done, update the content
+                        this.currentLevel = newLevel;
+                        this.panel.setAttribute('data-level', newLevel);
+                        this.panel.setAttribute('data-full-text', newText);
+                        this.panelText.textContent = newText;
+                        
+                        this.panel.style.backgroundColor = this.getPanelColor(newLevel);
+                        this.panelText.style.color = newLevel > 3 ? '#eee' : '#111';
+                        
+                        this.ensureTextFits();
+                        this.updateZoomInfo();
+                        
+                        // 3. Force a browser reflow. This is a trick to ensure the browser
+                        // processes the style changes before the next class is removed.
+                        void this.panel.offsetWidth;
+
+                        // 4. Remove the class to trigger the fade-in and expand animation
+                        this.panel.classList.remove('is-exiting');
+                        
+                        // Clean up this event listener
+                        this.panel.removeEventListener('transitionend', onTransitionEnd);
+                        resolve();
+                    };
+
+                    this.panel.addEventListener('transitionend', onTransitionEnd);
+                });
+            }
+
+            /**
+             * Adjusts font size to ensure text fits within the panel.
+             */
+            ensureTextFits() {
+                let fontSize = 48; // Start with a large font size
+                this.panelText.style.fontSize = `${fontSize}px`;
+
+                const maxHeight = this.panel.clientHeight - 80; // 40px padding top/bottom
+                const maxWidth = this.panel.clientWidth - 80; // 40px padding left/right
+
+                // Reduce font size until the text content fits
+                while ((this.panelText.scrollHeight > maxHeight || this.panelText.scrollWidth > maxWidth) && fontSize > 12) {
+                    fontSize -= 1;
+                    this.panelText.style.fontSize = `${fontSize}px`;
+                }
+            }
+            
+            getPanelColor(level) {
+                const colors = ['#ffffff', '#e0f7fa', '#b2ebf2', '#80deea', '#4dd0e1', '#26c6da', '#00bcd4'];
+                return colors[Math.min(level, colors.length - 1)];
+            }
+
+            updateZoomInfo() {
+                document.getElementById('zoomInfo').textContent = `Level: ${this.currentLevel}`;
+            }
+
+            updateStatus(message, type = 'info') {
+                const statusPanel = document.getElementById('statusPanel');
+                statusPanel.innerHTML = `<strong>${message}</strong>`;
+                statusPanel.className = `status ${type}`;
+            }
+
+            addToLog(message) {
+                const logContainer = document.getElementById('logContainer');
+                const entry = document.createElement('div');
+                Object.assign(entry.style, { padding: '5px', borderBottom: '1px solid #444', fontSize: '12px' });
+                entry.textContent = `Lvl ${this.currentLevel}: ${message}`;
+                logContainer.prepend(entry);
+                this.explorationPath.push({ level: this.currentLevel, text: message });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new SinglePanelExplorer();
+        });
+    </script>
+</body>
+</html>
