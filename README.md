@@ -2,14 +2,18 @@
 
 A revolutionary comic creation tool that generates endless, zoomable comic strips using AI language models and interactive web technology. Start with a simple sentence and dive into an infinite universe of interconnected stories through a beautiful web interface.
 
+## Demo
+
+![Zoom Comic Demo](demo.gif)
+
 ## Features
 
-- 🎨 **Infinite Comic Generation**: Creates recursive comic panels that can be zoomed into infinitely
-- 🤖 **AI Micro-Fiction Engine**: Uses GPT-2 with advanced micro-fiction techniques including Borges-like style primer and semantic beam-pruning
-- 🔍 **Interactive Web Interface**: Smooth panning and zooming with real-time panel generation
-- 🌐 **Web-Based**: Modern HTML/CSS rendering with Flask API backend
-- ⚡ **Real-time Generation**: New panels appear instantly as you zoom deeper
-- 🎭 **Narrative Continuity**: Advanced continuity tracking prevents meta-commentary and maintains story coherence
+- **Infinite Comic Generation**: Creates recursive comic panels that can be zoomed into infinitely
+- **AI Micro-Fiction Engine**: Uses GPT-2 with advanced micro-fiction techniques including Borges-like style primer and semantic beam-pruning
+- **Interactive Web Interface**: Smooth panning and zooming with real-time panel generation
+- **Web-Based**: Modern HTML/CSS rendering with Flask API backend
+- **Real-time Generation**: New panels appear instantly as you zoom deeper
+- **Narrative Continuity**: Advanced continuity tracking prevents meta-commentary and maintains story coherence
 
 ## Quick Start
 
